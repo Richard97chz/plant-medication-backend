@@ -42,7 +42,7 @@ except ImportError:
         # Si ambos fallan, importar directamente (considerando que estamos en el directorio app)
         try:
             import app.rag_chain
-            from hybrid_recommender import HybridRecommender
+            from app.hybrid_recommender import HybridRecommender
             process_consultation_with_safety = rag_chain.process_consultation_with_safety
         except ImportError as e:
             print(f"Error de importación crítico: {e}")
