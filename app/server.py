@@ -41,7 +41,7 @@ except ImportError:
     except ImportError:
         # Si ambos fallan, importar directamente (considerando que estamos en el directorio app)
         try:
-            import rag_chain
+            import app.rag_chain
             from hybrid_recommender import HybridRecommender
             process_consultation_with_safety = rag_chain.process_consultation_with_safety
         except ImportError as e:
