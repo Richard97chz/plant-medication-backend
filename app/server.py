@@ -164,10 +164,11 @@ def get_previous_recommendations_from_session(session_id: str) -> Dict[str, Any]
     cursor = None
     try:
         conn = psycopg2.connect(
-            dbname="databasePlantMedicator",
-            user="postgres",
-            password="Mascota3",
-            host="localhost"
+            dbname=os.getenv("DB_NAME"),   
+            user=os.getenv("DB_USER"),            
+            password=os.getenv("DB_PASSWORD"),    
+            host=os.getenv("DB_HOST"),            
+            port=os.getenv("DB_PORT")             
         )
         cursor = conn.cursor()
         
@@ -335,10 +336,11 @@ async def get_user_data_from_db(username: str) -> Optional[Dict[str, Any]]:
     cursor = None
     try:
         conn = psycopg2.connect(
-            dbname="databasePlantMedicator",
-            user="postgres",
-            password="Mascota3",
-            host="localhost"
+            dbname=os.getenv("DB_NAME"),   
+            user=os.getenv("DB_USER"),            
+            password=os.getenv("DB_PASSWORD"),    
+            host=os.getenv("DB_HOST"),            
+            port=os.getenv("DB_PORT")             
         )
         cursor = conn.cursor()
         
@@ -524,10 +526,11 @@ async def save_feedback(feedback: FeedbackRequest):
             )
         
         conn = psycopg2.connect(
-            dbname="databasePlantMedicator",
-            user="postgres",
-            password="Mascota3",
-            host="localhost"
+            dbname=os.getenv("DB_NAME"),   
+            user=os.getenv("DB_USER"),            
+            password=os.getenv("DB_PASSWORD"),    
+            host=os.getenv("DB_HOST"),            
+            port=os.getenv("DB_PORT")             
         )
         cursor = conn.cursor()
         
@@ -612,10 +615,11 @@ async def register_user(user: UserRegistration):
         print_terminal_separator()
         
         connection = psycopg2.connect(
-            host="localhost",
-            user="postgres",
-            password="Mascota3",
-            dbname="databasePlantMedicator"
+            dbname=os.getenv("DB_NAME"),   
+            user=os.getenv("DB_USER"),            
+            password=os.getenv("DB_PASSWORD"),    
+            host=os.getenv("DB_HOST"),            
+            port=os.getenv("DB_PORT")             
         )
         cursor = connection.cursor()
         
@@ -706,10 +710,11 @@ async def login(credentials: LoginCredentials):
         print_terminal_separator()
         
         connection = psycopg2.connect(
-            host="localhost",
-            user="postgres",
-            password="Mascota3",
-            dbname="databasePlantMedicator"
+            dbname=os.getenv("DB_NAME"),   
+            user=os.getenv("DB_USER"),            
+            password=os.getenv("DB_PASSWORD"),    
+            host=os.getenv("DB_HOST"),            
+            port=os.getenv("DB_PORT")             
         )
         cursor = connection.cursor()
 
