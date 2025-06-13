@@ -25,6 +25,7 @@ interface FormErrors {
 interface RegisterFormProps {
   onRegisterSuccess?: () => void;
 }
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess }) => {
   const navigate = useNavigate();
@@ -261,7 +262,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess })
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/register', {
+      const response = await fetch(`${API_URL}/api/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
