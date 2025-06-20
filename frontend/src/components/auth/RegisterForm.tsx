@@ -25,6 +25,8 @@ interface FormErrors {
 interface RegisterFormProps {
   onRegisterSuccess?: () => void;
 }
+
+// Corregir la configuración de la API URL
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess }) => {
@@ -65,6 +67,11 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess })
     "Universitaria completa",
     "Maestría/doctorado"
   ];
+
+  // Debug: Mostrar la URL que se está usando
+  useEffect(() => {
+    console.log('API_URL being used:', API_URL);
+  }, []);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
@@ -196,12 +203,10 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess })
     return '';
   };
 
-  // Función para validar todo el formulario
   const validateAllFields = (): boolean => {
     const newErrors: FormErrors = {};
     const newTouched: { [key: string]: boolean } = {};
     
-    // Lista de todos los campos requeridos
     const fieldsToValidate = [
       'fullName', 'email', 'username', 'password', 'confirmPassword',
       'dni', 'phoneNumber', 'age', 'gender', 'weight', 'height', 'zone', 'occupation'
@@ -251,7 +256,6 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess })
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validar todos los campos antes de enviar
     const isFormValid = validateAllFields();
     
     if (!isFormValid) {
@@ -262,6 +266,9 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess })
     setIsSubmitting(true);
 
     try {
+      console.log('Enviando a:', `${API_URL}/api/register`);
+      
+      // CORREGIR: Usar template literal correctamente con backticks
       const response = await fetch(`${API_URL}/api/register`, {
         method: 'POST',
         headers: {
@@ -603,13 +610,13 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess })
         </div>
 
         <button
-            type="submit"
-            disabled={isSubmitting}
-            className={`w-full bg-green-600 text-white p-2 rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
-                isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
+          type="submit"
+          disabled={isSubmitting}
+          className={`w-full bg-green-600 text-white p-2 rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+            isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
         >
-            {isSubmitting ? 'Registrando...' : 'Registrarse'}
+          {isSubmitting ? 'Registrando...' : 'Registrarse'}
         </button>
       </div>
     </form>
