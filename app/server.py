@@ -789,12 +789,28 @@ async def login(credentials: LoginCredentials):
 
 def run():
     import uvicorn
+    port = int(os.getenv("PORT", 8000))  # Render usa la variable PORT
     print_terminal_separator()
     print("🚀 INICIANDO SERVIDOR PlantMedicator")
+    print(f"🌐 Puerto: {port}")
     print("🌿 Sistema de Recomendación de Plantas Medicinales")
     print("📊 Con análisis dual RNA + RAG")
     print_terminal_separator()
-    uvicorn.run("app.server:app", host="0.0.0.0", port=8000, reload=True)
+    
+    # Para producción (Render)
+    if os.getenv("RENDER"):
+        uvicorn.run("app.server:app", host="0.0.0.0", port=port)
+    else:
+        # Para desarrollo local
+        uvicorn.run("app.server:app", host="0.0.0.0", port=port, reload=True)
 
+@app.get("/")
+async def root():
+    return {"message": "PlantMedicator API is running", "endpoints": ["/api/register", "/api/login", "/rag/chat", "/feedback"]}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "port": os.getenv("PORT", "8000")}
+    
 if __name__ == "__main__":
     run()
