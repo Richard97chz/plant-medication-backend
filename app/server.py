@@ -90,7 +90,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://plant-medication-backend.vercel.app", "http://localhost:3000"],
+    allow_origins=["https://plant-medication-frontend.vercel.app","https://plant-medication-backend.vercel.app", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
