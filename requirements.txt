@@ -142,3 +142,6 @@ uvicorn==0.30.6
 wrapt==1.16.0
 yarl==1.10.0
 scikit-learn
+
+bcrypt==4.1.2
+python-jose[cryptography]==3.3.0
