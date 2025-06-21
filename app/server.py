@@ -45,55 +45,87 @@ except ImportError:
             from app.hybrid_recommender import HybridRecommender
             process_consultation_with_safety = rag_chain.process_consultation_with_safety
         except ImportError as e:
-            print(f"Error de importación crítico: {e}")
-            raise
+            logger.error(f"Error de importación crítico: {e}")
+            # En lugar de raise, asignar None para manejar graciosamente
+            process_consultation_with_safety = None
+            HybridRecommender = None
 
 # Importar bcrypt para el hash de contraseñas
 try:
     import bcrypt
 except ImportError:
-    print("WARNING: bcrypt not installed. Installing...")
-    import pip
-    pip.main(['install', 'bcrypt'])
-    import bcrypt
-
-# Importar passlib.hash para compatibilidad
-try:
-    from passlib.hash import bcrypt as passlib_bcrypt
-except ImportError:
-    print("WARNING: passlib not installed. Some functionality may be limited.")
-    passlib_bcrypt = None
+    logger.warning("bcrypt not installed. Installing...")
+    try:
+        import subprocess
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "bcrypt"])
+        import bcrypt
+    except Exception as e:
+        logger.error(f"Failed to install bcrypt: {e}")
+        bcrypt = None
 
 # Importar jose para JWT
 try:
     from jose import JWTError, jwt
 except ImportError:
-    print("WARNING: python-jose not installed. Installing...")
-    import pip
-    pip.main(['install', 'python-jose[cryptography]'])
-    from jose import JWTError, jwt
+    logger.warning("python-jose not installed. Installing...")
+    try:
+        import subprocess
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "python-jose[cryptography]"])
+        from jose import JWTError, jwt
+    except Exception as e:
+        logger.error(f"Failed to install python-jose: {e}")
+        jwt = None
+        JWTError = Exception
 
-# Inicializar el recomendador híbrido
-hybrid_recommender = HybridRecommender()
+# Inicializar el recomendador híbrido solo si está disponible
+hybrid_recommender = None
+if HybridRecommender:
+    try:
+        hybrid_recommender = HybridRecommender()
+    except Exception as e:
+        logger.error(f"Failed to initialize HybridRecommender: {e}")
 
 # Configuración del JWT
-SECRET_KEY = "GROF*_*09"
+SECRET_KEY = os.getenv("SECRET_KEY", "GROF*_*09")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Lifecycle manager for the FastAPI app"""
+    logger.info("🚀 Iniciando aplicación PlantMedicator...")
     yield
+    logger.info("🛑 Cerrando aplicación PlantMedicator...")
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="PlantMedicator API",
+    description="Sistema de Recomendación de Plantas Medicinales",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Configuración CORS mejorada
+allowed_origins = [
+    "https://plant-medication-frontend.vercel.app",
+    "https://plant-medication-backend.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:8000",
+]
+
+# Agregar origen dinámico para Render
+render_url = os.getenv("RENDER_EXTERNAL_URL")
+if render_url:
+    allowed_origins.append(render_url)
+    allowed_origins.append(render_url.replace("https://", "http://"))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://plant-medication-frontend.vercel.app","https://plant-medication-backend.vercel.app", "http://localhost:3000"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 class PatientInfo(BaseModel):
@@ -133,7 +165,29 @@ class LoginCredentials(BaseModel):
     identifier: str
     password: str
 
+def get_db_connection():
+    """Crear conexión a la base de datos con manejo de errores"""
+    try:
+        conn = psycopg2.connect(
+            dbname=os.getenv("DB_NAME"),   
+            user=os.getenv("DB_USER"),            
+            password=os.getenv("DB_PASSWORD"),    
+            host=os.getenv("DB_HOST"),            
+            port=os.getenv("DB_PORT", "5432")
+        )
+        return conn
+    except Exception as e:
+        logger.error(f"Error conectando a la base de datos: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Error de conexión a la base de datos"
+        )
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """Crear token JWT"""
+    if not jwt:
+        raise HTTPException(status_code=500, detail="JWT not available")
+    
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -163,13 +217,7 @@ def get_previous_recommendations_from_session(session_id: str) -> Dict[str, Any]
     conn = None
     cursor = None
     try:
-        conn = psycopg2.connect(
-            dbname=os.getenv("DB_NAME"),   
-            user=os.getenv("DB_USER"),            
-            password=os.getenv("DB_PASSWORD"),    
-            host=os.getenv("DB_HOST"),            
-            port=os.getenv("DB_PORT")             
-        )
+        conn = get_db_connection()
         cursor = conn.cursor()
         
         # Buscar recomendaciones previas en la sesión
@@ -247,87 +295,6 @@ def print_consultation_header(state: str, session_id: str, selected_plant: Optio
         print(f"📋 Session ID: {session_id}")
         print("🔄 Iniciando evaluación dual RNA + RAG...")
 
-def print_precision_analysis(response: Dict[str, Any]):
-    """Imprime análisis detallado de precisión en la terminal"""
-    print_terminal_separator()
-    print("🧠 ANÁLISIS DE PRECISIÓN DEL SISTEMA")
-    print_terminal_separator()
-    
-    # Información básica
-    print(f"📊 Session ID: {response.get('session_id', 'N/A')}")
-    print(f"🎯 Sistema Elegido: {response.get('selected_system', 'N/A')}")
-    print(f"💡 Razón de Selección: {response.get('selection_reason', 'N/A')}")
-    print()
-    
-    # Precisiones
-    rna_precision = response.get('rna_precision', 0)
-    rag_precision = response.get('rag_precision', 0)
-    
-    print("📈 PRECISIÓN DE SISTEMAS:")
-    print(f"   🤖 RNA (Red Neuronal): {rna_precision:.4f} ({rna_precision*100:.2f}%)")
-    print(f"   📚 RAG (Retrieval-Aug): {rag_precision:.4f} ({rag_precision*100:.2f}%)")
-    print(f"   📊 Diferencia: {abs(rna_precision - rag_precision):.4f}")
-    
-    # Determinar ganador
-    if rna_precision > rag_precision:
-        winner = "RNA"
-        margin = rna_precision - rag_precision
-    elif rag_precision > rna_precision:
-        winner = "RAG"
-        margin = rag_precision - rna_precision
-    else:
-        winner = "EMPATE"
-        margin = 0
-    
-    print(f"   🏆 Ganador: {winner}" + (f" (margen: {margin:.4f})" if margin > 0 else ""))
-    print()
-    
-    # Recomendaciones RNA
-    rna_recs = response.get('rna_recommendations', [])
-    if rna_recs:
-        print("🤖 RECOMENDACIONES RNA:")
-        for i, plant in enumerate(rna_recs, 1):
-            print(f"   {i}. {plant.get('name', 'N/A')} ({plant.get('scientific_name', 'N/A')})")
-            print(f"      Confianza: {plant.get('confidence', 0):.3f}")
-    
-    print()
-    
-    # Recomendaciones RAG
-    rag_recs = response.get('rag_recommendations', '')
-    if rag_recs:
-        print("📚 RECOMENDACIONES RAG:")
-        # Mostrar solo las primeras líneas para no saturar
-        rag_lines = rag_recs.split('\n')[:3]
-        for line in rag_lines:
-            if line.strip():
-                print(f"   {line.strip()}")
-        if len(rag_lines) > 3:
-            print("   ...")
-    
-    print_terminal_separator()
-
-def print_detailed_preparation_summary(selected_plant: str, response: Dict[str, Any], session_id: str):
-    """
-    Imprime resumen de la preparación detallada generada
-    """
-    print_terminal_separator()
-    print("💊 PREPARACIÓN DETALLADA COMPLETADA")
-    print_terminal_separator()
-    print(f"🌱 Planta seleccionada: {selected_plant.title()}")
-    print(f"📋 Session ID: {session_id}")
-    print(f"📄 Método utilizado: RAG (Preparación detallada)")
-    print(f"📝 Longitud de respuesta: {len(response.get('answer', ''))} caracteres")
-    print(f"✅ Estado: Preparación generada exitosamente")
-    print()
-    print("📋 Contenido incluye:")
-    print("   • Nombre científico y propiedades")
-    print("   • Parte de la planta a utilizar")  
-    print("   • Forma de preparación detallada")
-    print("   • Dosis y frecuencia recomendada")
-    print("   • Duración del tratamiento")
-    print("   • Precauciones y efectos secundarios")
-    print_terminal_separator()
-
 async def get_user_data_from_db(username: str) -> Optional[Dict[str, Any]]:
     """
     Recupera los datos del usuario desde la base de datos usando el username
@@ -335,13 +302,7 @@ async def get_user_data_from_db(username: str) -> Optional[Dict[str, Any]]:
     conn = None
     cursor = None
     try:
-        conn = psycopg2.connect(
-            dbname=os.getenv("DB_NAME"),   
-            user=os.getenv("DB_USER"),            
-            password=os.getenv("DB_PASSWORD"),    
-            host=os.getenv("DB_HOST"),            
-            port=os.getenv("DB_PORT")             
-        )
+        conn = get_db_connection()
         cursor = conn.cursor()
         
         # Consulta para obtener datos del usuario
@@ -386,8 +347,47 @@ async def get_user_data_from_db(username: str) -> Optional[Dict[str, Any]]:
         if conn:
             conn.close()
 
+# Agregar endpoint HEAD para el root
+@app.head("/")
+async def head_root():
+    """Handle HEAD requests for health checks"""
+    return {}
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information"""
+    return {
+        "message": "PlantMedicator API is running",
+        "version": "1.0.0",
+        "status": "healthy",
+        "endpoints": {
+            "register": "/api/register",
+            "login": "/api/login", 
+            "chat": "/rag/chat",
+            "feedback": "/feedback",
+            "health": "/health"
+        }
+    }
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "port": os.getenv("PORT", "8000"),
+        "environment": "production" if os.getenv("RENDER") else "development"
+    }
+
 @app.post("/rag/chat")
 async def chat_endpoint(consultation: PatientConsultation):
+    """Main consultation endpoint"""
+    if not process_consultation_with_safety:
+        raise HTTPException(
+            status_code=503,
+            detail="Consultation service not available"
+        )
+    
     try:
         # DETECTAR ESTADO DE LA CONSULTA
         consultation_state, state_description = detect_consultation_state(
@@ -477,38 +477,20 @@ async def chat_endpoint(consultation: PatientConsultation):
         if "answer" not in response and "rag_answer" in response:
             response["answer"] = response["rag_answer"]
         
-        # MOSTRAR ANÁLISIS SEGÚN EL ESTADO
-        if consultation_state == "INITIAL_CONSULTATION":
-            # Mostrar análisis de precisión para nuevas consultas
-            print_precision_analysis(response)
-        else:
-            # Mostrar resumen de preparación detallada
-            print_detailed_preparation_summary(
-                consultation.selected_plant, 
-                response, 
-                consultation.session_id
-            )
-        
         logger.info("✅ CONSULTA PROCESADA EXITOSAMENTE")
         return response
         
     except HTTPException as e:
         logger.error(f"❌ HTTPException: {e.detail}")
-        print_terminal_separator()
-        print(f"❌ ERROR HTTP: {e.detail}")
-        print_terminal_separator()
         raise e
     except Exception as e:
         logger.error(f"❌ Error inesperado: {str(e)}")
-        print_terminal_separator()
-        print(f"❌ ERROR INESPERADO: {str(e)}")
-        print_terminal_separator()
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.post("/feedback")
 async def save_feedback(feedback: FeedbackRequest):
+    """Save user feedback"""
     try:
         print_terminal_separator()
         print("📝 GUARDANDO FEEDBACK")
@@ -525,13 +507,7 @@ async def save_feedback(feedback: FeedbackRequest):
                 detail="Invalid session_id format"
             )
         
-        conn = psycopg2.connect(
-            dbname=os.getenv("DB_NAME"),   
-            user=os.getenv("DB_USER"),            
-            password=os.getenv("DB_PASSWORD"),    
-            host=os.getenv("DB_HOST"),            
-            port=os.getenv("DB_PORT")             
-        )
+        conn = get_db_connection()
         cursor = conn.cursor()
         
         # Modificar la consulta para usar UUID
@@ -582,10 +558,6 @@ async def save_feedback(feedback: FeedbackRequest):
         conn.commit()
         logger.info("✅ Feedback guardado correctamente")
         
-        print_terminal_separator()
-        print("✅ FEEDBACK GUARDADO EXITOSAMENTE")
-        print_terminal_separator()
-        
         return {
             "status": "success",
             "message": "Feedback guardado correctamente",
@@ -596,7 +568,6 @@ async def save_feedback(feedback: FeedbackRequest):
         raise e
     except Exception as e:
         logger.error(f"❌ Error guardando feedback: {str(e)}")
-        print(f"❌ Error saving feedback: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Error al guardar el feedback: {str(e)}"
@@ -609,18 +580,19 @@ async def save_feedback(feedback: FeedbackRequest):
 
 @app.post("/api/register")
 async def register_user(user: UserRegistration):
+    """Register a new user"""
+    if not bcrypt:
+        raise HTTPException(
+            status_code=503,
+            detail="Registration service not available"
+        )
+    
     try:
         print_terminal_separator()
         print("👤 REGISTRO DE NUEVO USUARIO")
         print_terminal_separator()
         
-        connection = psycopg2.connect(
-            dbname=os.getenv("DB_NAME"),   
-            user=os.getenv("DB_USER"),            
-            password=os.getenv("DB_PASSWORD"),    
-            host=os.getenv("DB_HOST"),
-            port=os.getenv("DB_PORT") 
-        )
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         logger.info(f"📝 Registrando usuario: {user.username} ({user.email})")
@@ -673,7 +645,7 @@ async def register_user(user: UserRegistration):
             user.weight,
             user.height,
             user.zone,
-            user.occupation,
+            user.occupation or 'No especificada',
             'No especificada',
             datetime.now(),
             None
@@ -682,10 +654,6 @@ async def register_user(user: UserRegistration):
         connection.commit()
         logger.info(f"✅ Usuario registrado exitosamente: {user.username}")
         
-        print_terminal_separator()
-        print(f"✅ USUARIO REGISTRADO: {user.username}")
-        print_terminal_separator()
-        
         return {"message": "Usuario registrado exitosamente"}
 
     except HTTPException as e:
@@ -693,7 +661,6 @@ async def register_user(user: UserRegistration):
         raise e
     except Exception as e:
         logger.error(f"❌ Error registrando usuario: {str(e)}")
-        print(f"❌ Error registering user: {str(e)}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error al registrar usuario: {str(e)}")
     finally:
@@ -704,18 +671,19 @@ async def register_user(user: UserRegistration):
 
 @app.post("/api/login")
 async def login(credentials: LoginCredentials):
+    """User login endpoint"""
+    if not bcrypt or not jwt:
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication service not available"
+        )
+    
     try:
         print_terminal_separator()
         print("🔐 INTENTO DE LOGIN")
         print_terminal_separator()
         
-        connection = psycopg2.connect(
-            dbname=os.getenv("DB_NAME"),   
-            user=os.getenv("DB_USER"),            
-            password=os.getenv("DB_PASSWORD"),    
-            host=os.getenv("DB_HOST"),            
-            port=os.getenv("DB_PORT")             
-        )
+        connection = get_db_connection()
         cursor = connection.cursor()
 
         logger.info(f"👤 Intento de login para: {credentials.identifier}")
@@ -759,10 +727,6 @@ async def login(credentials: LoginCredentials):
         )
 
         logger.info(f"✅ Login exitoso para: {username}")
-        
-        print_terminal_separator()
-        print(f"✅ LOGIN EXITOSO: {username}")
-        print_terminal_separator()
 
         return {
             "access_token": access_token,
@@ -775,7 +739,6 @@ async def login(credentials: LoginCredentials):
         raise e
     except Exception as e:
         logger.error(f"❌ Error inesperado en login: {str(e)}")
-        print(f"❌ Error in login: {str(e)}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -788,8 +751,10 @@ async def login(credentials: LoginCredentials):
             connection.close()
 
 def run():
+    """Run the application"""
     import uvicorn
-    port = int(os.getenv("PORT", 8000))  # Render usa la variable PORT
+    port = int(os.getenv("PORT", 8000))
+    
     print_terminal_separator()
     print("🚀 INICIANDO SERVIDOR PlantMedicator")
     print(f"🌐 Puerto: {port}")
@@ -797,20 +762,25 @@ def run():
     print("📊 Con análisis dual RNA + RAG")
     print_terminal_separator()
     
-    # Para producción (Render)
+    # Configuración para producción o desarrollo
     if os.getenv("RENDER"):
-        uvicorn.run("app.server:app", host="0.0.0.0", port=port)
+        # Producción en Render
+        uvicorn.run(
+            "app.server:app", 
+            host="0.0.0.0", 
+            port=port,
+            log_level="info",
+            access_log=True
+        )
     else:
-        # Para desarrollo local
-        uvicorn.run("app.server:app", host="0.0.0.0", port=port, reload=True)
-
-@app.get("/")
-async def root():
-    return {"message": "PlantMedicator API is running", "endpoints": ["/api/register", "/api/login", "/rag/chat", "/feedback"]}
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "port": os.getenv("PORT", "8000")}
+        # Desarrollo local
+        uvicorn.run(
+            "app.server:app", 
+            host="0.0.0.0", 
+            port=port, 
+            reload=True,
+            log_level="debug"
+        )
     
 if __name__ == "__main__":
     run()
