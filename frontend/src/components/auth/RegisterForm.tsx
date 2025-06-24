@@ -269,7 +269,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess })
       console.log('Enviando a:', `${API_URL}/api/register`);
       
       // CORREGIR: Usar template literal correctamente con backticks
-      const response = await fetch(`${API_URL}/register`, {
+      const response = await fetch(`${API_URL}/api/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
