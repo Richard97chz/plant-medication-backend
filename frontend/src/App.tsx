@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { LoginForm } from './components/auth/LoginForm';
 import { RegisterForm } from './components/auth/RegisterForm';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 
 interface Message {
   id: string;
@@ -10,7 +8,6 @@ interface Message {
   isUser: boolean;
 }
 
-// Modificar la interfaz PatientInfo removiendo age
 interface PatientInfo {
   symptoms?: string;
   duration?: string;
@@ -24,18 +21,38 @@ interface FeedbackData {
   additionalComments: string;
 }
 
-// Actualizar el objeto QUESTIONS removiendo AGE
+// Generar un ID único simple sin dependencias externas
+const generateId = (): string => {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+};
+
 const QUESTIONS = {
   SYMPTOMS: '¿Cuáles son tus síntomas principales?',
   DURATION: '¿Hace cuánto tiempo tienes estos síntomas?',
   ALLERGIES: '¿Tienes alguna alergia conocida? Si no tienes, escribe "ninguna"'
 };
 
+// Configuración de la API URL - corregida para funcionar en producción y desarrollo
+const getApiUrl = (): string => {
+  // En desarrollo
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    return 'http://localhost:8000';
+  }
+  
+  // En producción - usar variable de entorno o URL por defecto
+  return process.env.REACT_APP_API_URL || 
+         process.env.NEXT_PUBLIC_API_URL || 
+         'https://plant-medication-backend.onrender.com'; // Reemplaza con tu URL real de backend
+};
+
+type ViewType = 'login' | 'register' | 'chat';
+
 const App = () => {
+  const [currentView, setCurrentView] = useState<ViewType>('login');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [currentQuestion, setCurrentQuestion] = useState('AGE');
+  const [currentQuestion, setCurrentQuestion] = useState('SYMPTOMS');
   const [patientInfo, setPatientInfo] = useState<PatientInfo>({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [awaitingPlantSelection, setAwaitingPlantSelection] = useState(false);
@@ -48,7 +65,7 @@ const App = () => {
     additionalComments: ''
   });
 
-  const sessionIdRef = useRef<string>(uuidv4());
+  const sessionIdRef = useRef<string>(generateId());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -61,6 +78,8 @@ const App = () => {
 
   // Función para obtener el nombre del usuario desde localStorage
   const getUserDisplayName = (): string => {
+    if (typeof window === 'undefined') return 'Usuario';
+    
     const userInfo = localStorage.getItem('userInfo');
     if (userInfo) {
       try {
@@ -74,33 +93,31 @@ const App = () => {
     return 'Usuario';
   };
 
-  // En el componente App, modificar el resetConsultation
-const resetConsultation = useCallback(() => {
-  sessionIdRef.current = uuidv4();
-  setMessages([{
-    id: uuidv4(),
-    message: QUESTIONS.SYMPTOMS,
-    isUser: false
-  }]);
-  setCurrentQuestion('SYMPTOMS');
-  setPatientInfo({});
-  setAwaitingPlantSelection(false);
-  setShowFeedbackForm(false);
-  setInputValue('');
-  setFeedbackStep(0);
-  setFeedbackData({
-    effectiveness: 0,
-    sideEffects: '',
-    timeToImprovement: '',
-    additionalComments: ''
-  });
-}, []);
+  const resetConsultation = useCallback(() => {
+    sessionIdRef.current = generateId();
+    setMessages([{
+      id: generateId(),
+      message: QUESTIONS.SYMPTOMS,
+      isUser: false
+    }]);
+    setCurrentQuestion('SYMPTOMS');
+    setPatientInfo({});
+    setAwaitingPlantSelection(false);
+    setShowFeedbackForm(false);
+    setInputValue('');
+    setFeedbackStep(0);
+    setFeedbackData({
+      effectiveness: 0,
+      sideEffects: '',
+      timeToImprovement: '',
+      additionalComments: ''
+    });
+  }, []);
 
   useEffect(() => {
     resetConsultation();
   }, [resetConsultation]);
 
-  // Modificar validateAnswer removiendo la validación de AGE
   const validateAnswer = (question: string, answer: string): boolean => {
     const trimmedAnswer = answer.trim();
     
@@ -116,90 +133,89 @@ const resetConsultation = useCallback(() => {
     }
   };
 
-const saveFeedback = async (feedbackData: FeedbackData) => {
-  try {
-    // Validar que tenemos los datos necesarios
-    if (!feedbackData.effectiveness || !sessionIdRef.current) {
-      throw new Error('Faltan datos requeridos para el feedback');
-    }
+  const saveFeedback = async (feedbackData: FeedbackData) => {
+    try {
+      if (!feedbackData.effectiveness || !sessionIdRef.current) {
+        throw new Error('Faltan datos requeridos para el feedback');
+      }
 
-    console.log('Sending feedback data:', {
-      session_id: sessionIdRef.current,
-      ...feedbackData
-    });
-
-    const response = await fetch('http://localhost:8000/feedback', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+      console.log('Sending feedback data:', {
         session_id: sessionIdRef.current,
-        effectiveness_rating: parseInt(feedbackData.effectiveness.toString()),
-        side_effects: feedbackData.sideEffects || '',
-        improvement_time: feedbackData.timeToImprovement || '',
-        additional_comments: feedbackData.additionalComments || ''
-      })
-    });
+        ...feedbackData
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Error al guardar la evaluación');
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionIdRef.current,
+          effectiveness_rating: parseInt(feedbackData.effectiveness.toString()),
+          side_effects: feedbackData.sideEffects || '',
+          improvement_time: feedbackData.timeToImprovement || '',
+          additional_comments: feedbackData.additionalComments || ''
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Error al guardar la evaluación');
+      }
+
+      const data = await response.json();
+      console.log('Feedback response data:', data);
+      
+      setFeedbackStep(4);
+      setMessages(prev => [...prev, {
+        id: generateId(),
+        message: 'Gracias por tu evaluación. Ha sido guardada correctamente.',
+        isUser: false
+      }]);
+      
+      setTimeout(() => {
+        resetConsultation();
+      }, 5000);
+
+    } catch (error: unknown) {
+      console.error('Error saving feedback:', error);
+      let errorMessage = 'Error al guardar la evaluación';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = String(error.message);
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      setMessages(prev => [...prev, {
+        id: generateId(),
+        message: `Error al guardar la evaluación: ${errorMessage}`,
+        isUser: false
+      }]);
     }
+  };
 
-    const data = await response.json();
-    console.log('Feedback response data:', data);
-    
-    setFeedbackStep(4);
-    setMessages(prev => [...prev, {
-      id: uuidv4(),
-      message: 'Gracias por tu evaluación. Ha sido guardada correctamente.',
-      isUser: false
-    }]);
-    
-    setTimeout(() => {
-      resetConsultation();
-    }, 5000);
-
-  } catch (error: unknown) {
-    console.error('Error saving feedback:', error);
-    let errorMessage = 'Error al guardar la evaluación';
-    
-    // Verificar el tipo de error y extraer el mensaje apropiadamente
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    } else if (error && typeof error === 'object' && 'message' in error) {
-      errorMessage = String(error.message);
-    } else if (typeof error === 'string') {
-      errorMessage = error;
-    }
-    
-    setMessages(prev => [...prev, {
-      id: uuidv4(),
-      message: `Error al guardar la evaluación: ${errorMessage}`,
-      isUser: false
-    }]);
-  }
-};
-
-
-  // En App.tsx, modifica la función requestMedication para incluir logs:
   const requestMedication = async (selectedPlant?: string) => {
     try {
+      if (typeof window === 'undefined') return;
+      
       const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
       if (!userInfo.username) {
         setMessages(prev => [...prev, {
-          id: uuidv4(),
+          id: generateId(),
           message: "Error: No se encontró información del usuario. Por favor, inicia sesión nuevamente.",
           isUser: false
         }]);
         setIsAuthenticated(false);
+        setCurrentView('login');
         return;
       }
-  
-      // Asegurarse de que las alergias tengan un valor válido
+
       const allergies = patientInfo.allergies || 'ninguna';
-  
+
       const requestBody = {
         session_id: sessionIdRef.current,
         patient_info: {
@@ -211,40 +227,41 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
         },
         selected_plant: selectedPlant || null
       };
-  
+
       console.log('Sending request with body:', requestBody);
-  
-      const response = await fetch('http://localhost:8000/rag/chat', {
+
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/rag/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody)
       });
-  
+
       const data = await response.json();
       
       if (!response.ok) {
         throw new Error(data.detail || data.error || 'Error en la solicitud');
       }
-  
+
       setMessages(prev => [...prev, {
-        id: uuidv4(),
+        id: generateId(),
         message: data.answer,
         isUser: false
       }]);
-  
+
       if (!selectedPlant) {
         setAwaitingPlantSelection(true);
       } else {
         setAwaitingPlantSelection(false);
         setShowFeedbackForm(true);
       }
-  
+
     } catch (error) {
       console.error('Error in requestMedication:', error);
       setMessages(prev => [...prev, {
-        id: uuidv4(),
+        id: generateId(),
         message: `Error: ${error instanceof Error ? error.message : 'Error desconocido'}`,
         isUser: false
       }]);
@@ -260,7 +277,7 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
     };
     
     setFeedbackData(updatedFeedbackData);
-  
+
     if (feedbackStep < 3) {
       setFeedbackStep(prev => prev + 1);
       setInputValue('');
@@ -271,7 +288,6 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
     }
   };
 
-  // Modificar el processAnswer removiendo el caso AGE
   const processAnswer = async (answer: string) => {
     if (isProcessing) return;
     
@@ -283,26 +299,25 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
       setIsProcessing(false);
       return;
     }
-  
-    // Verificar que la respuesta no esté vacía
+
     if (!validateAnswer(currentQuestion, normalizedAnswer)) {
       setMessages(prev => [...prev, {
-        id: uuidv4(),
+        id: generateId(),
         message: 'Por favor proporciona una respuesta válida.',
         isUser: false
       }]);
       return;
     }
-  
+
     setIsProcessing(true);
-  
+
     try {
       switch (currentQuestion) {
         case 'SYMPTOMS':
           setPatientInfo(prev => ({ ...prev, symptoms: normalizedAnswer }));
           setCurrentQuestion('DURATION');
           setMessages(prev => [...prev, {
-            id: uuidv4(),
+            id: generateId(),
             message: QUESTIONS.DURATION,
             isUser: false
           }]);
@@ -311,13 +326,12 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
           setPatientInfo(prev => ({ ...prev, duration: normalizedAnswer }));
           setCurrentQuestion('ALLERGIES');
           setMessages(prev => [...prev, {
-            id: uuidv4(),
+            id: generateId(),
             message: QUESTIONS.ALLERGIES,
             isUser: false
           }]);
           break;
         case 'ALLERGIES':
-          // Asegurarse de que las alergias se establezcan antes de la solicitud
           const normalizedAllergies = normalizedAnswer.toLowerCase();
           await new Promise<void>(resolve => {
             setPatientInfo(prev => {
@@ -330,17 +344,14 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
             });
           });
           
-          // Esperar un momento para asegurar que el estado se ha actualizado
           await new Promise(resolve => setTimeout(resolve, 100));
-          
-          // Proceder con la solicitud
           await requestMedication();
           break;
       }
     } catch (error) {
       console.error('Error processing answer:', error);
       setMessages(prev => [...prev, {
-        id: uuidv4(),
+        id: generateId(),
         message: 'Ocurrió un error al procesar tu respuesta. Por favor, intenta nuevamente.',
         isUser: false
       }]);
@@ -353,7 +364,7 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
     if (!inputValue.trim() || isProcessing) return;
 
     const userMessage = {
-      id: uuidv4(),
+      id: generateId(),
       message: inputValue,
       isUser: true
     };
@@ -364,65 +375,76 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
   };
 
   useEffect(() => {
-    const checkAuth = () => {
-      // Obtener los datos del localStorage
+    const checkAuth = async () => {
+      if (typeof window === 'undefined') return;
+      
       const userInfo = localStorage.getItem('userInfo');
       const token = localStorage.getItem('token');
-  
-      // Si no hay datos, el usuario no está autenticado
+
       if (!userInfo || !token) {
         setIsAuthenticated(false);
+        setCurrentView('login');
         return;
       }
-  
-      // Si hay datos, verificar si el token es válido
-      // (Aquí debes implementar una llamada a tu backend para validar el token)
-      fetch('http://localhost:8000/api/validate-token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-      })
-        .then((response) => {
-          if (response.ok) {
-            // El token es válido, el usuario está autenticado
-            setIsAuthenticated(true);
-          } else {
-            // El token no es válido, limpiar el localStorage
-            localStorage.removeItem('userInfo');
-            localStorage.removeItem('token');
-            setIsAuthenticated(false);
-          }
-        })
-        .catch((error) => {
-          console.error('Error validating token:', error);
-          // Si hay un error, limpiar el localStorage
+
+      try {
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/validate-token`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          setIsAuthenticated(true);
+          setCurrentView('chat');
+        } else {
           localStorage.removeItem('userInfo');
           localStorage.removeItem('token');
           setIsAuthenticated(false);
-        });
+          setCurrentView('login');
+        }
+      } catch (error) {
+        console.error('Error validating token:', error);
+        localStorage.removeItem('userInfo');
+        localStorage.removeItem('token');
+        setIsAuthenticated(false);
+        setCurrentView('login');
+      }
     };
-  
-    // Ejecutar la verificación al cargar la aplicación
+
     checkAuth();
   }, []);
 
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
+    setCurrentView('chat');
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('userInfo');
-    localStorage.removeItem('token');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('userInfo');
+      localStorage.removeItem('token');
+    }
     setIsAuthenticated(false);
+    setCurrentView('login');
     resetConsultation();
+  };
+
+  const navigateToRegister = () => {
+    setCurrentView('register');
+  };
+
+  const navigateToLogin = () => {
+    setCurrentView('login');
   };
 
   const ChatComponent = () => {
     const inputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-  
+
     useEffect(() => {
       if (!showFeedbackForm && inputRef.current) {
         inputRef.current.focus();
@@ -433,7 +455,7 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
         textareaRef.current.setSelectionRange(length, length);
       }
     }, [showFeedbackForm, feedbackStep]);
-  
+
     const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const newValue = e.target.value;
       setInputValue(newValue);
@@ -574,7 +596,7 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
             </p>
           </div>
         )}
-  
+
         <div className="flex-grow space-y-4 overflow-y-auto mb-4">
           {messages.map((msg) => (
             <div key={msg.id} 
@@ -582,11 +604,11 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
                 msg.isUser ? 'bg-green-100 ml-auto' : 'bg-gray-100'
               }`}>
               {msg.message}
-              </div>
+            </div>
           ))}
           <div ref={messagesEndRef} />
         </div>
-  
+
         {!showFeedbackForm ? (
           <div className="mt-auto">
             <div className="flex gap-2">
@@ -669,11 +691,52 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
     );
   };
 
-  const ProtectedChat = () => {
-    if (!isAuthenticated) {
-      return <Navigate to="/login" replace />;
-    }
+  // Renderizado condicional basado en la vista actual
+  if (currentView === 'login') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-green-600 text-white p-4 text-center">
+          <h1 className="text-2xl font-bold">Sistema de Consulta Médica Natural</h1>
+        </header>
+        <main className="container mx-auto p-4 max-w-2xl">
+          <LoginForm onLoginSuccess={handleLoginSuccess} />
+          <p className="text-center mt-4">
+            ¿No tienes una cuenta?{' '}
+            <button 
+              onClick={navigateToRegister}
+              className="text-green-600 hover:text-green-700 underline"
+            >
+              Regístrate aquí
+            </button>
+          </p>
+        </main>
+      </div>
+    );
+  }
 
+  if (currentView === 'register') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-green-600 text-white p-4 text-center">
+          <h1 className="text-2xl font-bold">Sistema de Consulta Médica Natural</h1>
+        </header>
+        <main className="container mx-auto p-4 max-w-2xl">
+          <RegisterForm onRegisterSuccess={navigateToLogin} />
+          <p className="text-center mt-4">
+            ¿Ya tienes una cuenta?{' '}
+            <button 
+              onClick={navigateToLogin}
+              className="text-green-600 hover:text-green-700 underline"
+            >
+              Inicia sesión
+            </button>
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  if (currentView === 'chat' && isAuthenticated) {
     const userDisplayName = getUserDisplayName();
 
     return (
@@ -700,75 +763,16 @@ const saveFeedback = async (feedbackData: FeedbackData) => {
         </main>
       </div>
     );
-  };
+  }
 
+  // Fallback
   return (
-    <Router>
-      <Routes>
-        <Route 
-          path="/" 
-          element={isAuthenticated ? <Navigate to="/chat" replace /> : <Navigate to="/login" replace />} 
-        />
-
-        <Route 
-          path="/login" 
-          element={
-            isAuthenticated ? (
-              <Navigate to="/chat" replace />
-            ) : (
-              <div className="min-h-screen bg-gray-50">
-                <header className="bg-green-600 text-white p-4 text-center">
-                  <h1 className="text-2xl font-bold">Sistema de Consulta Médica Natural</h1>
-                </header>
-                <main className="container mx-auto p-4 max-w-2xl">
-                  <LoginForm onLoginSuccess={handleLoginSuccess} />
-                  <p className="text-center mt-4">
-                    ¿No tienes una cuenta?{' '}
-                    <Link to="/register" className="text-green-600 hover:text-green-700">
-                      Regístrate aquí
-                    </Link>
-                  </p>
-                </main>
-              </div>
-            )
-          } 
-        />
-        
-        <Route 
-          path="/register" 
-          element={
-            isAuthenticated ? (
-              <Navigate to="/chat" replace />
-            ) : (
-              <div className="min-h-screen bg-gray-50">
-                <header className="bg-green-600 text-white p-4 text-center">
-                  <h1 className="text-2xl font-bold">Sistema de Consulta Médica Natural</h1>
-                </header>
-                <main className="container mx-auto p-4 max-w-2xl">
-                  <RegisterForm onRegisterSuccess={() => <Navigate to="/login" replace />} />
-                  <p className="text-center mt-4">
-                    ¿Ya tienes una cuenta?{' '}
-                    <Link to="/login" className="text-green-600 hover:text-green-700">
-                      Inicia sesión
-                    </Link>
-                  </p>
-                </main>
-              </div>
-            )
-          } 
-        />
-
-        <Route 
-          path="/chat" 
-          element={<ProtectedChat />} 
-        />
-
-        <Route 
-          path="*" 
-          element={<Navigate to="/" replace />} 
-        />
-      </Routes>
-    </Router>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold text-gray-800 mb-4">Cargando...</h1>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+      </div>
+    </div>
   );
 };
 
