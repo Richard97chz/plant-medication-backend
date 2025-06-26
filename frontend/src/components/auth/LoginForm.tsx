@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import type { LoginCredentials } from '../../types/auth.types';
 
 interface LoginFormProps {
     onLoginSuccess: (username: string) => void;
 }
+
+// CORREGIR: Usar la misma configuración que RegisterForm
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
     const [credentials, setCredentials] = useState<LoginCredentials>({
@@ -15,13 +18,21 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
+    // Debug: Mostrar la URL que se está usando (mismo que RegisterForm)
+    useEffect(() => {
+        console.log('Login API_URL being used:', API_URL);
+    }, []);
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setIsLoading(true);
 
         try {
-            const response = await fetch('http://localhost:8000/api/login', {
+            // CORREGIR: Usar la misma URL base que RegisterForm
+            console.log('Enviando login a:', `${API_URL}/api/login`);
+            
+            const response = await fetch(`${API_URL}/api/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -52,6 +63,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
                 onLoginSuccess(userInfo.username);
             }
         } catch (error) {
+            console.error('Error en login:', error);
             setError(error instanceof Error ? 
                 error.message : 
                 'Usuario o contraseña incorrectos');
