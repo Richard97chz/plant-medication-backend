@@ -27,7 +27,9 @@ interface RegisterFormProps {
 }
 
 // Corregir la configuración de la API URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.REACT_APP_API_URL || 
+               process.env.NEXT_PUBLIC_API_URL || 
+               'https://plant-medication-backend.vercel.app';
 
 export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess }) => {
   const navigate = useNavigate();
