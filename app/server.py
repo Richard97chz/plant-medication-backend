@@ -646,6 +646,7 @@ async def register_user(user: UserRegistration):
             user.height,
             user.zone,
             user.occupation or 'No especificada',
+            'No especificada',
             datetime.now(),
             None
         ))
